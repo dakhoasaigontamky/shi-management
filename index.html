@@ -91,7 +91,7 @@ function buildNormalizer(values) {
 
 let state = {
   user: null, role: 'viewer',
-  lines: [], trash: [], periods: [], categories: [], reference: [], codeAliases: [],
+  lines: [], trash: [], periods: [], categories: [], reference: [], codeAliases: [], khoaAliases: [],
   tab: 'overview',
   dashYear: 'ALL', dashQuarter: 'ALL', paretoScope: 'filtered',
   filterKhoa: 'ALL', filterBacSi: 'ALL', filterNhom: 'ALL', filterCause: 'ALL', filterRemediator: 'ALL',
@@ -165,7 +165,7 @@ async function afterLogin(session) {
 }
 async function logout() {
   await sb.auth.signOut();
-  state = { ...state, user: null, role: 'viewer', lines: [], trash: [], periods: [], categories: [], reference: [], codeAliases: [], tab: 'overview' };
+  state = { ...state, user: null, role: 'viewer', lines: [], trash: [], periods: [], categories: [], reference: [], codeAliases: [], khoaAliases: [], tab: 'overview' };
 }
 async function handleChangePassword() {
   const newPw = document.getElementById('pw-new').value;
@@ -201,13 +201,14 @@ async function fetchAllRows(table, orderCols, filterFn) {
 }
 
 async function loadAll() {
-  const [lines, trash, pers, cats, refs, aliases] = await Promise.all([
+  const [lines, trash, pers, cats, refs, aliases, khoaAliases] = await Promise.all([
     fetchAllRows('bhyt_lines', null, (q) => q.is('deleted_at', null)),
     fetchAllRows('bhyt_lines', ['deleted_at'], (q) => q.not('deleted_at', 'is', null)),
     fetchAllRows('bhyt_periods', ['year', 'quarter']),
     fetchAllRows('bhyt_categories', ['code']),
     fetchAllRows('bhyt_reference', ['phu_luc', 'stt']),
     fetchAllRows('bhyt_code_aliases', ['alias_code']),
+    fetchAllRows('bhyt_khoa_aliases', ['alias_name']),
   ]);
   state.lines = lines || [];
   state.trash = trash || [];
@@ -215,9 +216,22 @@ async function loadAll() {
   state.categories = cats || [];
   state.reference = refs || [];
   state.codeAliases = aliases || [];
-  state.khoaNorm = buildNormalizer(state.lines.map((l) => l.department));
+  state.khoaAliases = khoaAliases || [];
+  state.khoaNorm = buildKhoaNormalizer();
   state.bacSiNorm = buildNormalizer(state.lines.map((l) => l.individual));
   state.remediatorNorm = buildNormalizer(state.lines.map((l) => l.remediator));
+}
+// Quy 1 tên Khoa về đúng tên chuẩn đã khai báo trong Ánh xạ tên Khoa (nếu có), giữ nguyên nếu chưa khai báo
+function resolveKhoaAlias(name) {
+  const n = String(name || '').trim();
+  if (!n) return n;
+  const alias = state.khoaAliases.find((a) => a.alias_name === n);
+  return alias ? alias.canonical_name : n;
+}
+// Chuẩn hoá tên Khoa: gộp hoa/thường trước (buildNormalizer), rồi áp ánh xạ thủ công (bhyt_khoa_aliases)
+function buildKhoaNormalizer() {
+  const caseNorm = buildNormalizer(state.lines.map((l) => l.department));
+  return (raw) => resolveKhoaAlias(caseNorm(raw));
 }
 
 // Quy 1 mã Phụ lục về đúng mã chuẩn đã khai báo trong Ánh xạ mã chuyên đề (nếu có), giữ nguyên nếu chưa khai báo
@@ -348,7 +362,7 @@ function paretoData(metric, scope, topN) {
   return sorted.map((r) => { cum += r.value; return { ...r, cumPct: total ? (cum / total) * 100 : 0 }; });
 }
 
-function khoaNormalizer() { return state.khoaNorm || buildNormalizer(state.lines.map((l) => l.department)); }
+function khoaNormalizer() { return state.khoaNorm || buildKhoaNormalizer(); }
 function bacSiNormalizer() { return state.bacSiNorm || buildNormalizer(state.lines.map((l) => l.individual)); }
 function remediatorNormalizer() { return state.remediatorNorm || buildNormalizer(state.lines.map((l) => l.remediator)); }
 function khoaList() { const n = khoaNormalizer(); return Array.from(new Set(state.lines.map((l) => n(l.department)).filter(Boolean))).sort(); }
@@ -1497,6 +1511,28 @@ function setupHTML() {
           </tbody>
         </table>
       </div>
+      <div class="bg-white border border-slate-200 rounded-lg p-4 lg:col-span-2">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-700">Ánh xạ tên Khoa (khi tên khoa bị gõ lệch nhau)</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Cùng 1 khoa nhưng bị gõ khác nhau (thiếu/thừa dấu gạch, viết tắt khác...)? Khai báo "tên trong dữ liệu = tên chuẩn" ở đây để mọi thống kê gộp đúng lại thành 1 khoa.</p>
+          </div>
+          ${canEdit ? '<div class="flex gap-2"><button id="btn-add-khoa-alias" class="text-blue-800 hover:text-blue-600 text-sm font-medium whitespace-nowrap">+ Thêm ánh xạ</button><button id="btn-apply-khoa-aliases" class="text-amber-700 hover:text-amber-800 text-sm font-medium whitespace-nowrap">Áp dụng cho dữ liệu đã có</button></div>' : ''}
+        </div>
+        <table class="w-full text-sm">
+          <thead class="text-xs text-slate-500 uppercase"><tr><th class="text-left py-1">Tên trong dữ liệu (alias)</th><th class="text-left py-1">Tên chuẩn (quy về)</th><th class="text-left py-1">Ghi chú</th><th></th></tr></thead>
+          <tbody>
+            ${state.khoaAliases.map((a, idx) => `
+              <tr class="border-t border-slate-100">
+                <td class="py-1.5"><input ${canEdit ? '' : 'disabled'} type="text" data-ka-idx="${idx}" data-ka-field="alias_name" value="${escapeHtml(a.alias_name)}" class="border border-slate-200 rounded px-1 py-1 w-48" /></td>
+                <td class="py-1.5"><input ${canEdit ? '' : 'disabled'} type="text" data-ka-idx="${idx}" data-ka-field="canonical_name" value="${escapeHtml(a.canonical_name)}" class="border border-slate-200 rounded px-1 py-1 w-48" /></td>
+                <td class="py-1.5"><input ${canEdit ? '' : 'disabled'} type="text" data-ka-idx="${idx}" data-ka-field="note" value="${escapeHtml(a.note || '')}" class="border border-slate-200 rounded px-1 py-1 w-full" /></td>
+                <td class="py-1.5 text-center">${canEdit ? `<button data-del-khoa-alias="${escapeHtml(a.alias_name)}" class="text-slate-400 hover:text-red-600">✕</button>` : ''}</td>
+              </tr>`).join('')}
+            ${state.khoaAliases.length === 0 ? '<tr><td colspan="4" class="text-center text-slate-400 py-6">Chưa có ánh xạ nào</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 }
@@ -1720,6 +1756,12 @@ function attachTabEvents() {
     if (applyAliasBtn) applyAliasBtn.onclick = applyAliasesToExisting;
     document.querySelectorAll('[data-a-idx]').forEach((input) => input.addEventListener('change', () => saveAliasField(Number(input.dataset.aIdx), input.dataset.aField, input.value)));
     document.querySelectorAll('[data-del-alias]').forEach((btn) => { btn.onclick = () => deleteAlias(btn.dataset.delAlias); });
+    const addKhoaAliasBtn = document.getElementById('btn-add-khoa-alias');
+    if (addKhoaAliasBtn) addKhoaAliasBtn.onclick = addKhoaAliasRow;
+    const applyKhoaAliasBtn = document.getElementById('btn-apply-khoa-aliases');
+    if (applyKhoaAliasBtn) applyKhoaAliasBtn.onclick = applyKhoaAliasesToExisting;
+    document.querySelectorAll('[data-ka-idx]').forEach((input) => input.addEventListener('change', () => saveKhoaAliasField(Number(input.dataset.kaIdx), input.dataset.kaField, input.value)));
+    document.querySelectorAll('[data-del-khoa-alias]').forEach((btn) => { btn.onclick = () => deleteKhoaAlias(btn.dataset.delKhoaAlias); });
   }
   if (state.tab === 'trash') {
     document.querySelectorAll('[data-restore-line]').forEach((btn) => { btn.onclick = () => restoreLine(btn.dataset.restoreLine); });
@@ -1973,6 +2015,56 @@ async function applyAliasesToExisting() {
   for (const a of state.codeAliases) {
     const { error, count } = await sb.from('bhyt_lines').update({ code: a.canonical_code }, { count: 'exact' }).eq('code', a.alias_code);
     if (error) { alert(`Lỗi khi áp dụng ánh xạ ${a.alias_code} → ${a.canonical_code}: ` + error.message); continue; }
+    totalUpdated += count || 0;
+  }
+  await loadAll();
+  alert(`Đã cập nhật ${totalUpdated} dòng theo ánh xạ.`);
+  renderTab();
+}
+
+// ---------------------------------------------------------------
+// CRUD: khoa aliases (ánh xạ tên Khoa)
+// ---------------------------------------------------------------
+async function saveKhoaAliasField(idx, field, value) {
+  const a = state.khoaAliases[idx];
+  if (field === 'alias_name') {
+    const { error } = await sb.from('bhyt_khoa_aliases').delete().eq('alias_name', a.alias_name);
+    if (error) { alert('Lỗi: ' + error.message); return; }
+    const { data, error: err2 } = await sb.from('bhyt_khoa_aliases').insert({ alias_name: value, canonical_name: a.canonical_name, note: a.note }).select().single();
+    if (err2) { alert('Lỗi: ' + err2.message); return; }
+    state.khoaAliases[idx] = data;
+    state.khoaNorm = buildKhoaNormalizer();
+    renderTab();
+    return;
+  }
+  await sb.from('bhyt_khoa_aliases').update({ [field]: value }).eq('alias_name', a.alias_name);
+  a[field] = value;
+  state.khoaNorm = buildKhoaNormalizer();
+}
+async function deleteKhoaAlias(aliasName) {
+  await sb.from('bhyt_khoa_aliases').delete().eq('alias_name', aliasName);
+  state.khoaAliases = state.khoaAliases.filter((a) => a.alias_name !== aliasName);
+  state.khoaNorm = buildKhoaNormalizer();
+  renderTab();
+}
+async function addKhoaAliasRow() {
+  const aliasName = prompt('Tên khoa xuất hiện trong dữ liệu (biến thể cần quy đổi):');
+  if (!aliasName) return;
+  const canonicalName = prompt('Quy về tên khoa chuẩn nào?');
+  if (!canonicalName) return;
+  const { data, error } = await sb.from('bhyt_khoa_aliases').insert({ alias_name: aliasName.trim(), canonical_name: canonicalName.trim(), note: '' }).select().single();
+  if (error) { alert('Lỗi khi thêm: ' + error.message); return; }
+  state.khoaAliases.push(data);
+  state.khoaNorm = buildKhoaNormalizer();
+  renderTab();
+}
+async function applyKhoaAliasesToExisting() {
+  if (state.khoaAliases.length === 0) { alert('Chưa có ánh xạ nào để áp dụng.'); return; }
+  if (!confirm(`Áp dụng ${state.khoaAliases.length} ánh xạ cho toàn bộ dữ liệu đã có? Các dòng có tên khoa trùng "Tên trong dữ liệu" sẽ được đổi thành "Tên chuẩn" tương ứng. Không thể hoàn tác.`)) return;
+  let totalUpdated = 0;
+  for (const a of state.khoaAliases) {
+    const { error, count } = await sb.from('bhyt_lines').update({ department: a.canonical_name }, { count: 'exact' }).eq('department', a.alias_name);
+    if (error) { alert(`Lỗi khi áp dụng ánh xạ ${a.alias_name} → ${a.canonical_name}: ` + error.message); continue; }
     totalUpdated += count || 0;
   }
   await loadAll();
