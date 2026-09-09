@@ -506,8 +506,8 @@ function render() {
             <div class="text-sm text-blue-300 leading-tight">Dashboard quản lý xuất toán BHYT BV ĐK Sài Gòn Tam Kỳ</div>
           </div>
         </button>
-        <button id="btn-toggle-actions" class="sm:hidden text-white text-xl px-2 py-1 rounded-md hover:bg-blue-800/60">⋮</button>
-        <div id="header-actions" class="${state.showMobileActions ? 'flex' : 'hidden'} sm:flex items-center gap-2 flex-wrap w-full sm:w-auto">
+        <button id="btn-toggle-actions" class="lg:hidden text-white text-xl px-2 py-1 rounded-md hover:bg-blue-800/60">⋮</button>
+        <div id="header-actions" class="${state.showMobileActions ? 'flex' : 'hidden'} lg:flex items-center gap-2 flex-wrap w-full lg:w-auto">
           ${canEdit ? `<input type="file" id="import-file" accept=".xlsx,.xls" class="hidden" />
           <button id="btn-import" class="bg-white text-blue-900 hover:bg-blue-50 rounded-md px-3 py-2 text-sm font-medium">Import Excel</button>` : ''}
           ${canEdit ? `<button id="btn-settings" title="Kỳ &amp; Danh mục" class="border border-blue-600 text-white rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-800 ${state.tab === 'setup' ? 'bg-blue-800' : ''}">⚙️</button>` : ''}
