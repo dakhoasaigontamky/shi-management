@@ -2121,8 +2121,10 @@ function equipItemHTML(e, canEdit) {
           <span class="text-sm font-medium text-slate-800">${escapeHtml(e.ten_tb || '(chưa đặt tên)')}</span>
           <span class="text-xs text-slate-400 ml-2">${escapeHtml(e.khoa_phong || '')}</span>
         </div>
-        <span class="text-xs font-medium rounded px-1.5 py-0.5 border bg-slate-50 text-slate-600 border-slate-200 whitespace-nowrap shrink-0">${e.doanh_thu_tb_thang ? fmtVND(equipAnnualRevenue(e)) + ' đ/năm' : '—'}</span>
-        <span class="text-slate-400 text-sm shrink-0">${expanded ? '▲' : '▼'}</span>
+        <div class="flex items-center gap-2 shrink-0">
+          <span class="text-xs font-medium rounded px-1.5 py-0.5 border bg-slate-50 text-slate-600 border-slate-200 whitespace-nowrap w-32 text-right">${e.doanh_thu_tb_thang ? fmtVND(equipAnnualRevenue(e)) + ' đ/năm' : '—'}</span>
+          <span class="text-slate-400 text-sm">${expanded ? '▲' : '▼'}</span>
+        </div>
       </button>
       ${expanded ? `
         <div class="px-4 pb-4 pt-1 border-t border-slate-100 text-sm">
