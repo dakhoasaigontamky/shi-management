@@ -1753,14 +1753,23 @@ function ngoaiKiemAnnualRevenue(ct) {
   if (ct.doanh_thu_6thang != null) return { value: ct.doanh_thu_6thang * 2, isEstimate: true };
   return { value: null, isEstimate: false };
 }
+// Chi phí ngoại kiểm/năm: dùng số thật (Tổng chi phí tham gia/năm) nếu đã có, chưa có (thường gặp ở nhóm
+// chưa tham gia) thì tạm dùng chi phí dự kiến năm 2027 (Phí mẫu + Phí phân tích) làm ước tính
+function ngoaiKiemAnnualCost(ct) {
+  if (ct.tong_chi_phi_nam != null) return { value: ct.tong_chi_phi_nam, isEstimate: false };
+  const projected = (Number(ct.nam2027_phi_mau) || 0) + (Number(ct.nam2027_phi_phan_tich) || 0);
+  if (projected > 0) return { value: projected, isEstimate: true };
+  return { value: null, isEstimate: false };
+}
 function ngoaiKiemProgramCardHTML(ct, canEdit) {
   if (state.ngoaiKiemEditingId === ct.id) return ngoaiKiemFormHTML(ct);
   const expanded = state.ngoaiKiemExpanded.has(String(ct.id));
   const isThamGia = (ct.section || '').includes('không') === false;
   const annualRev = ngoaiKiemAnnualRevenue(ct);
-  const pctChiPhi = (ct.tong_chi_phi_nam && annualRev.value) ? (ct.tong_chi_phi_nam / annualRev.value) * 100 : (ct.ty_le_chi_phi != null ? ct.ty_le_chi_phi * 100 : null);
+  const annualCost = ngoaiKiemAnnualCost(ct);
+  const pctChiPhi = (annualCost.value && annualRev.value) ? (annualCost.value / annualRev.value) * 100 : (ct.ty_le_chi_phi != null ? ct.ty_le_chi_phi * 100 : null);
   const badges = `
-    ${ct.tong_chi_phi_nam != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border bg-slate-50 text-slate-600 border-slate-200 whitespace-nowrap">Chi phí ngoại kiểm/năm: ${fmtVND(ct.tong_chi_phi_nam)} đ</span>` : ''}
+    ${annualCost.value != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border bg-slate-50 text-slate-600 border-slate-200 whitespace-nowrap">Chi phí ngoại kiểm/năm: ${annualCost.isEstimate ? '≈ ' : ''}${fmtVND(annualCost.value)} đ${annualCost.isEstimate ? ' (dự kiến 2027)' : ''}</span>` : ''}
     ${annualRev.value != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border ${isThamGia ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'} whitespace-nowrap">${isThamGia ? '' : '⚠ '}Doanh thu BH XN/năm: ${annualRev.isEstimate ? '≈ ' : ''}${fmtVND(annualRev.value)} đ${annualRev.isEstimate ? ' (ước tính)' : ''}</span>` : ''}
     ${pctChiPhi != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border bg-blue-50 text-blue-700 border-blue-200 whitespace-nowrap">% CP ngoại kiểm/DT: ${pctChiPhi.toFixed(1)}%</span>` : ''}
   `;
@@ -1892,13 +1901,14 @@ function ngoaiKiemTabHTML() {
   `;
 }
 function ngoaiKiemGroupTotalHTML(list, isRisk) {
-  const tongChiPhi = list.reduce((s, ct) => s + (Number(ct.tong_chi_phi_nam) || 0), 0);
+  const tongChiPhi = list.reduce((s, ct) => s + (ngoaiKiemAnnualCost(ct).value || 0), 0);
   const tongDoanhThu = list.reduce((s, ct) => s + (ngoaiKiemAnnualRevenue(ct).value || 0), 0);
+  const hasCostEstimate = list.some((ct) => ngoaiKiemAnnualCost(ct).isEstimate);
   const hasEstimate = list.some((ct) => ngoaiKiemAnnualRevenue(ct).isEstimate);
   const pct = tongDoanhThu ? (tongChiPhi / tongDoanhThu) * 100 : null;
   return `
     <div class="${isRisk ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'} border rounded-lg px-4 py-3 mb-3 flex flex-wrap items-center gap-x-6 gap-y-1">
-      <span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">${isRisk ? '⚠ ' : ''}Tổng chi phí ngoại kiểm/năm: <b>${fmtVND(tongChiPhi)} đ</b></span>
+      <span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">${isRisk ? '⚠ ' : ''}Tổng chi phí ngoại kiểm/năm: <b>${hasCostEstimate ? '≈ ' : ''}${fmtVND(tongChiPhi)} đ</b>${hasCostEstimate ? ' <span class="text-xs opacity-70">(có phần dự kiến 2027)</span>' : ''}</span>
       <span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">Tổng doanh thu BH XN/năm: <b>${hasEstimate ? '≈ ' : ''}${fmtVND(tongDoanhThu)} đ</b>${hasEstimate ? ' <span class="text-xs opacity-70">(có phần ước tính)</span>' : ''}</span>
       ${pct != null ? `<span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">Tỉ lệ CP/DT: <b>${pct.toFixed(1)}%</b></span>` : ''}
     </div>
