@@ -1747,14 +1747,21 @@ function referenceDvktTimeHTML() {
   `;
 }
 
+// Doanh thu BH XN/năm: dùng số thật nếu đã nhập, chưa có thì tạm ước tính = doanh thu 6 tháng × 2
+function ngoaiKiemAnnualRevenue(ct) {
+  if (ct.doanh_thu_bh_xn_nam != null) return { value: ct.doanh_thu_bh_xn_nam, isEstimate: false };
+  if (ct.doanh_thu_6thang != null) return { value: ct.doanh_thu_6thang * 2, isEstimate: true };
+  return { value: null, isEstimate: false };
+}
 function ngoaiKiemProgramCardHTML(ct, canEdit) {
   if (state.ngoaiKiemEditingId === ct.id) return ngoaiKiemFormHTML(ct);
   const expanded = state.ngoaiKiemExpanded.has(String(ct.id));
   const isThamGia = (ct.section || '').includes('không') === false;
-  const pctChiPhi = (ct.tong_chi_phi_nam && ct.doanh_thu_bh_xn_nam) ? (ct.tong_chi_phi_nam / ct.doanh_thu_bh_xn_nam) * 100 : (ct.ty_le_chi_phi != null ? ct.ty_le_chi_phi * 100 : null);
+  const annualRev = ngoaiKiemAnnualRevenue(ct);
+  const pctChiPhi = (ct.tong_chi_phi_nam && annualRev.value) ? (ct.tong_chi_phi_nam / annualRev.value) * 100 : (ct.ty_le_chi_phi != null ? ct.ty_le_chi_phi * 100 : null);
   const badges = `
     ${ct.tong_chi_phi_nam != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border bg-slate-50 text-slate-600 border-slate-200 whitespace-nowrap">Chi phí ngoại kiểm/năm: ${fmtVND(ct.tong_chi_phi_nam)} đ</span>` : ''}
-    ${ct.doanh_thu_bh_xn_nam != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border ${isThamGia ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'} whitespace-nowrap">${isThamGia ? '' : '⚠ '}Doanh thu BH XN/năm: ${fmtVND(ct.doanh_thu_bh_xn_nam)} đ</span>` : ''}
+    ${annualRev.value != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border ${isThamGia ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'} whitespace-nowrap">${isThamGia ? '' : '⚠ '}Doanh thu BH XN/năm: ${annualRev.isEstimate ? '≈ ' : ''}${fmtVND(annualRev.value)} đ${annualRev.isEstimate ? ' (ước tính)' : ''}</span>` : ''}
     ${pctChiPhi != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border bg-blue-50 text-blue-700 border-blue-200 whitespace-nowrap">% CP ngoại kiểm/DT: ${pctChiPhi.toFixed(1)}%</span>` : ''}
   `;
   return `
@@ -1772,7 +1779,7 @@ function ngoaiKiemProgramCardHTML(ct, canEdit) {
           <div><div class="text-xs text-slate-400">Tỉ lệ % chi phí ngoại kiểm/doanh thu</div><div>${ct.ty_le_chi_phi != null ? (ct.ty_le_chi_phi * 100).toFixed(2) + '%' : '—'}</div></div>` : ''}
           <div><div class="text-xs text-slate-400">Đề nghị BHYT thanh toán (Quý 1 / Quý 2 / Q1+Q2)</div><div>${fmtVND(ct.de_nghi_q1)} / ${fmtVND(ct.de_nghi_q2)} / ${fmtVND(ct.de_nghi_q1q2)} đ</div></div>
           <div><div class="text-xs text-slate-400">Doanh thu 6 tháng đầu năm</div><div>${fmtVND(ct.doanh_thu_6thang)} đ</div></div>
-          <div><div class="text-xs text-slate-400">Doanh thu BH XN/năm</div><div>${ct.doanh_thu_bh_xn_nam != null ? fmtVND(ct.doanh_thu_bh_xn_nam) + ' đ' : '—'}</div></div>
+          <div><div class="text-xs text-slate-400">Doanh thu BH XN/năm</div><div>${annualRev.value != null ? (annualRev.isEstimate ? '≈ ' : '') + fmtVND(annualRev.value) + ' đ' + (annualRev.isEstimate ? ' (ước tính = doanh thu 6 tháng × 2)' : '') : '—'}</div></div>
           <div><div class="text-xs text-slate-400">Dự kiến năm 2027 (Phí mẫu / NCC / Phí phân tích)</div><div>${ct.nam2027_phi_mau ? fmtVND(ct.nam2027_phi_mau) + ' đ' : '—'} / ${escapeHtml(ct.nam2027_ncc_mau || '—')} / ${ct.nam2027_phi_phan_tich ? fmtVND(ct.nam2027_phi_phan_tich) + ' đ' : '—'}</div></div>
         </div>
         ${ct.children && ct.children.length ? `
@@ -1886,12 +1893,13 @@ function ngoaiKiemTabHTML() {
 }
 function ngoaiKiemGroupTotalHTML(list, isRisk) {
   const tongChiPhi = list.reduce((s, ct) => s + (Number(ct.tong_chi_phi_nam) || 0), 0);
-  const tongDoanhThu = list.reduce((s, ct) => s + (Number(ct.doanh_thu_bh_xn_nam) || 0), 0);
+  const tongDoanhThu = list.reduce((s, ct) => s + (ngoaiKiemAnnualRevenue(ct).value || 0), 0);
+  const hasEstimate = list.some((ct) => ngoaiKiemAnnualRevenue(ct).isEstimate);
   const pct = tongDoanhThu ? (tongChiPhi / tongDoanhThu) * 100 : null;
   return `
     <div class="${isRisk ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'} border rounded-lg px-4 py-3 mb-3 flex flex-wrap items-center gap-x-6 gap-y-1">
       <span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">${isRisk ? '⚠ ' : ''}Tổng chi phí ngoại kiểm/năm: <b>${fmtVND(tongChiPhi)} đ</b></span>
-      <span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">Tổng doanh thu BH XN/năm: <b>${fmtVND(tongDoanhThu)} đ</b></span>
+      <span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">Tổng doanh thu BH XN/năm: <b>${hasEstimate ? '≈ ' : ''}${fmtVND(tongDoanhThu)} đ</b>${hasEstimate ? ' <span class="text-xs opacity-70">(có phần ước tính)</span>' : ''}</span>
       ${pct != null ? `<span class="text-sm ${isRisk ? 'text-red-700' : 'text-slate-600'}">Tỉ lệ CP/DT: <b>${pct.toFixed(1)}%</b></span>` : ''}
     </div>
   `;
