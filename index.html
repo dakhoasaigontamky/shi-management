@@ -1749,8 +1749,9 @@ function referenceDvktTimeHTML() {
 
 function ngoaiKiemProgramCardHTML(ct, canEdit) {
   if (state.ngoaiKiemEditingId === ct.id) return ngoaiKiemFormHTML(ct);
+  const expanded = state.ngoaiKiemExpanded.has(String(ct.id));
   const isThamGia = (ct.section || '').includes('không') === false;
-  const pctChiPhi = (ct.tong_chi_phi_nam && ct.doanh_thu_bh_xn_nam) ? (ct.tong_chi_phi_nam / ct.doanh_thu_bh_xn_nam) * 100 : null;
+  const pctChiPhi = (ct.tong_chi_phi_nam && ct.doanh_thu_bh_xn_nam) ? (ct.tong_chi_phi_nam / ct.doanh_thu_bh_xn_nam) * 100 : (ct.ty_le_chi_phi != null ? ct.ty_le_chi_phi * 100 : null);
   const badges = `
     ${ct.tong_chi_phi_nam != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border bg-slate-50 text-slate-600 border-slate-200 whitespace-nowrap">Chi phí ngoại kiểm/năm: ${fmtVND(ct.tong_chi_phi_nam)} đ</span>` : ''}
     ${ct.doanh_thu_bh_xn_nam != null ? `<span class="text-[11px] font-medium rounded px-1.5 py-0.5 border ${isThamGia ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'} whitespace-nowrap">${isThamGia ? '' : '⚠ '}Doanh thu BH XN/năm: ${fmtVND(ct.doanh_thu_bh_xn_nam)} đ</span>` : ''}
@@ -1758,11 +1759,12 @@ function ngoaiKiemProgramCardHTML(ct, canEdit) {
   `;
   return `
     <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
-      <div class="px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b border-slate-100">
+      <button data-ngoaikiem-toggle="${ct.id}" class="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 flex-wrap">
         <span class="text-sm font-medium text-slate-800">${escapeHtml(ct.ten_chuong_trinh || '')}</span>
-        <div class="flex items-center gap-2 flex-wrap">${badges}</div>
-      </div>
-      <div class="px-4 pb-4 pt-3 text-sm">
+        <div class="flex items-center gap-2 flex-wrap">${badges}<span class="text-slate-400 text-sm shrink-0">${expanded ? '▲' : '▼'}</span></div>
+      </button>
+      ${expanded ? `
+      <div class="px-4 pb-4 pt-3 text-sm border-t border-slate-100">
         <div class="grid md:grid-cols-3 gap-3 mb-3">
           ${isThamGia ? `
           <div><div class="text-xs text-slate-400">Giá mẫu / NCC mẫu</div><div>${ct.gia_mau ? fmtVND(ct.gia_mau) + ' đ' : '—'} / ${escapeHtml(ct.ncc_mau || '—')}</div></div>
@@ -1789,7 +1791,7 @@ function ngoaiKiemProgramCardHTML(ct, canEdit) {
           </tbody>
         </table>` : ''}
         ${canEdit ? `<div class="flex gap-3 pt-1"><button data-ngoaikiem-add-child="${ct.id}" class="text-xs text-blue-700 hover:underline">+ Thêm dịch vụ</button><button data-ngoaikiem-edit="${ct.id}" class="text-xs text-blue-700 hover:underline">Sửa</button><button data-ngoaikiem-delete="${ct.id}" class="text-xs text-red-600 hover:underline">Xoá chương trình</button></div>` : ''}
-      </div>
+      </div>` : ''}
     </div>`;
 }
 function ngoaiKiemFormHTML(ct) {
@@ -2823,6 +2825,7 @@ function attachTabEvents() {
     document.querySelectorAll('[data-ref-save]').forEach((btn) => { btn.onclick = () => saveReferenceForm(btn.dataset.refSave); });
   }
   if (state.tab === 'ngoaikiem') {
+    document.querySelectorAll('[data-ngoaikiem-toggle]').forEach((btn) => { btn.onclick = () => { const id = btn.dataset.ngoaikiemToggle; if (state.ngoaiKiemExpanded.has(id)) state.ngoaiKiemExpanded.delete(id); else state.ngoaiKiemExpanded.add(id); renderTab(); }; });
     const nkSearchEl = document.getElementById('ngoaikiem-search');
     if (nkSearchEl) {
       nkSearchEl.addEventListener('input', (e) => { state.ngoaiKiemSearch = e.target.value; renderTab(); });
